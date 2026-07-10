@@ -1,0 +1,38 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --color-stitch-50: #fdf8f6;
+  --color-stitch-100: #f5ebe6;
+  --color-stitch-200: #e8d5cc;
+  --color-stitch-300: #d4b5a5;
+  --color-stitch-400: #b88f7a;
+  --color-stitch-500: #9a6f5c;
+  --color-stitch-600: #7d5848;
+  --color-stitch-700: #66463b;
+  --color-stitch-800: #553b33;
+  --color-stitch-900: #48332d;
+  --color-stitch-950: #271a16;
+}
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply min-h-dvh bg-stitch-50 font-sans text-stitch-900 antialiased dark:bg-stitch-950 dark:text-stitch-100;
+  }
+
+  /* Prevent horizontal overflow on small screens */
+  #root {
+    @apply min-h-dvh overflow-x-hidden;
+  }
+
+  /* Visible focus for keyboard users (WCAG AA) */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-stitch-500 dark:outline-stitch-400;
+  }
+}
