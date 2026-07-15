@@ -1,5 +1,5 @@
-/** Supported Aida / evenweave fabric counts (stitches per inch). */
-export type FabricCount = 11 | 14 | 16 | 18 | 20 | 22 | 25 | 28 | 32
+/** Supported fabric counts (stitches per inch). */
+export type FabricCount = 4 | 9
 
 /** Preset border margins in inches, or a custom value. */
 export type BorderMarginPreset = 2 | 3 | 4 | 'custom'
@@ -42,13 +42,13 @@ export interface CalculationResult {
 }
 
 export const DEFAULT_SETTINGS: CalculatorSettings = {
-  stitchWidth: 56,
-  stitchHeight: 56,
-  fabricWidthInches: 10,
-  fabricHeightInches: 10,
-  fabricCount: 14,
-  borderMarginPreset: 3,
-  customBorderMargin: 3,
+  stitchWidth: 36,
+  stitchHeight: 36,
+  fabricWidthInches: 9,
+  fabricHeightInches: 9,
+  fabricCount: 9,
+  borderMarginPreset: 'custom',
+  customBorderMargin: 0,
   fabricColorId: 'white',
   threadColorId: 'navy',
 }

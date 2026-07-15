@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { resolveMarginInches, stitchesToInches } from '../../utils/dimensions'
+import { stitchesToInches } from '../../utils/dimensions'
 import type { CalculatorSettings } from '../../types'
-import { BORDER_MARGIN_PRESETS } from '../../constants/fabricCounts'
-import type { BorderMarginPreset } from '../../types'
+import { MAX_ZOOM, MIN_ZOOM } from '../../constants/fabricCounts'
+import { parseZoomPercent } from '../../utils/zoom'
 
 const MIN_FABRIC_IN = 4
 const MAX_FABRIC_IN = 99
@@ -13,13 +13,12 @@ interface FabricSizeControlsProps {
   zoom: number
   fitToView: boolean
   onFabricSizeChange: (widthIn: number, heightIn: number) => void
-  onMarginPresetChange: (preset: BorderMarginPreset) => void
-  onCustomMarginChange: (margin: number) => void
   onNewDesign: () => void
   onReset: () => void
   onZoomIn: () => void
   onZoomOut: () => void
   onToggleFitToView: () => void
+  onZoomChange: (zoom: number) => void
 }
 
 function clampFabricInches(value: number): number {
@@ -34,29 +33,26 @@ function parseFabricInput(raw: string): number | null {
   return clampFabricInches(value)
 }
 
-/** Fabric size in inches, margins, and zoom controls for the design studio. */
+/** Fabric size in inches and zoom controls (working area only, no margins). */
 export function FabricSizeControls({
   settings,
   stitchCount,
   zoom,
   fitToView,
   onFabricSizeChange,
-  onMarginPresetChange,
-  onCustomMarginChange,
   onNewDesign,
   onReset,
   onZoomIn,
   onZoomOut,
   onToggleFitToView,
+  onZoomChange,
 }: FabricSizeControlsProps) {
-  const margin = resolveMarginInches(settings.borderMarginPreset, settings.customBorderMargin)
   const designW = stitchesToInches(settings.stitchWidth, settings.fabricCount)
   const designH = stitchesToInches(settings.stitchHeight, settings.fabricCount)
-  const isCustomMargin = settings.borderMarginPreset === 'custom'
 
-  // Local draft strings so single/double-digit values (e.g. 5, 12) type naturally
   const [widthDraft, setWidthDraft] = useState(String(settings.fabricWidthInches))
   const [heightDraft, setHeightDraft] = useState(String(settings.fabricHeightInches))
+  const [zoomDraft, setZoomDraft] = useState(String(Math.round(zoom * 100)))
 
   useEffect(() => {
     setWidthDraft(String(settings.fabricWidthInches))
@@ -65,6 +61,10 @@ export function FabricSizeControls({
   useEffect(() => {
     setHeightDraft(String(settings.fabricHeightInches))
   }, [settings.fabricHeightInches])
+
+  useEffect(() => {
+    setZoomDraft(String(Math.round(zoom * 100)))
+  }, [zoom])
 
   const commitWidth = (raw: string) => {
     const value = parseFabricInput(raw)
@@ -86,6 +86,16 @@ export function FabricSizeControls({
     onFabricSizeChange(settings.fabricWidthInches, value)
   }
 
+  const commitZoom = (raw: string) => {
+    const value = parseZoomPercent(raw)
+    if (value === null) {
+      setZoomDraft(String(Math.round(zoom * 100)))
+      return
+    }
+    setZoomDraft(String(Math.round(value * 100)))
+    onZoomChange(value)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
@@ -95,7 +105,7 @@ export function FabricSizeControls({
               htmlFor="fabric-width-in"
               className="mb-1 block text-xs font-medium text-stitch-600 dark:text-stitch-400"
             >
-              Fabric width
+              Width
             </label>
             <div className="relative">
               <input
@@ -119,7 +129,7 @@ export function FabricSizeControls({
               htmlFor="fabric-height-in"
               className="mb-1 block text-xs font-medium text-stitch-600 dark:text-stitch-400"
             >
-              Fabric height
+              Height
             </label>
             <div className="relative">
               <input
@@ -160,7 +170,7 @@ export function FabricSizeControls({
           type="button"
           onClick={onToggleFitToView}
           aria-pressed={fitToView}
-          className={`min-h-11 rounded-xl border px-3 text-sm font-medium transition-colors ${
+          className={`min-h-11 touch-manipulation rounded-xl border px-3 text-sm font-medium transition-colors active:scale-95 ${
             fitToView
               ? 'border-stitch-500 bg-stitch-500 text-white'
               : 'border-stitch-200 text-stitch-700 hover:bg-stitch-50 dark:border-stitch-700 dark:text-stitch-200 dark:hover:bg-stitch-800'
@@ -169,23 +179,50 @@ export function FabricSizeControls({
           Fit pattern
         </button>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-end gap-1">
           <button
             type="button"
             onClick={onZoomOut}
             aria-label="Zoom out"
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-stitch-200 text-lg font-bold dark:border-stitch-700"
+            className="flex min-h-11 min-w-11 touch-manipulation items-center justify-center rounded-xl border border-stitch-200 text-lg font-bold active:scale-95 dark:border-stitch-700"
           >
             −
           </button>
-          <span className="min-w-14 text-center text-sm text-stitch-600 dark:text-stitch-400">
-            {fitToView ? 'Fit' : `${Math.round(zoom * 100)}%`}
-          </span>
+          <div>
+            <label
+              htmlFor="zoom-percent"
+              className="mb-1 block text-xs font-medium text-stitch-600 dark:text-stitch-400"
+            >
+              Zoom
+            </label>
+            <div className="relative">
+              <input
+                id="zoom-percent"
+                type="text"
+                inputMode="numeric"
+                value={fitToView ? 'Fit' : zoomDraft}
+                onChange={(e) => {
+                  if (fitToView) return
+                  setZoomDraft(e.target.value)
+                }}
+                onFocus={() => {
+                  if (fitToView) onZoomChange(zoom)
+                }}
+                onBlur={(e) => commitZoom(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && commitZoom(zoomDraft)}
+                aria-label="Zoom percent"
+                className="min-h-11 w-20 rounded-xl border border-stitch-200 bg-white px-2 pr-7 text-center text-sm dark:border-stitch-700 dark:bg-stitch-800"
+              />
+              <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-stitch-500">
+                %
+              </span>
+            </div>
+          </div>
           <button
             type="button"
             onClick={onZoomIn}
             aria-label="Zoom in"
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-stitch-200 text-lg font-bold dark:border-stitch-700"
+            className="flex min-h-11 min-w-11 touch-manipulation items-center justify-center rounded-xl border border-stitch-200 text-lg font-bold active:scale-95 dark:border-stitch-700"
           >
             +
           </button>
@@ -193,79 +230,19 @@ export function FabricSizeControls({
       </div>
 
       <p className="text-xs text-stitch-500 dark:text-stitch-400">
-        Fabric size: {MIN_FABRIC_IN}&Prime; to {MAX_FABRIC_IN}&Prime; (e.g. 5, 8, 12, 24). Press Enter or tap
-        away to apply.
+        Working area only · {settings.fabricCount} stitches per inch · size{' '}
+        {MIN_FABRIC_IN}&Prime;–{MAX_FABRIC_IN}&Prime; · zoom {Math.round(MIN_ZOOM * 100)}%–
+        {Math.round(MAX_ZOOM * 100)}%
       </p>
-
-      <fieldset>
-        <legend className="mb-2 text-xs font-medium text-stitch-600 dark:text-stitch-400">
-          Border margin (each side)
-        </legend>
-        <div className="flex flex-wrap gap-2">
-          {BORDER_MARGIN_PRESETS.map((m) => (
-            <label
-              key={m}
-              className={`flex min-h-11 min-w-[3.5rem] cursor-pointer items-center justify-center rounded-xl border px-3 text-sm font-semibold ${
-                settings.borderMarginPreset === m
-                  ? 'border-stitch-500 bg-stitch-500 text-white'
-                  : 'border-stitch-200 bg-white text-stitch-700 dark:border-stitch-700 dark:bg-stitch-800 dark:text-stitch-200'
-              }`}
-            >
-              <input
-                type="radio"
-                name="studio-margin"
-                className="sr-only"
-                checked={settings.borderMarginPreset === m}
-                onChange={() => onMarginPresetChange(m)}
-              />
-              {m}&Prime;
-            </label>
-          ))}
-          <label
-            className={`flex min-h-11 min-w-[3.5rem] cursor-pointer items-center justify-center rounded-xl border px-3 text-sm font-semibold ${
-              isCustomMargin
-                ? 'border-stitch-500 bg-stitch-500 text-white'
-                : 'border-stitch-200 bg-white text-stitch-700 dark:border-stitch-700 dark:bg-stitch-800 dark:text-stitch-200'
-            }`}
-          >
-            <input
-              type="radio"
-              name="studio-margin"
-              className="sr-only"
-              checked={isCustomMargin}
-              onChange={() => onMarginPresetChange('custom')}
-            />
-            Custom
-          </label>
-        </div>
-        {isCustomMargin && (
-          <div className="relative mt-2 max-w-[6rem]">
-            <input
-              type="number"
-              inputMode="decimal"
-              min={0}
-              max={10}
-              step={0.25}
-              value={settings.customBorderMargin}
-              onChange={(e) => onCustomMarginChange(parseFloat(e.target.value) || 0)}
-              className="min-h-11 w-full rounded-xl border border-stitch-200 bg-white px-2 pr-8 text-center dark:border-stitch-700 dark:bg-stitch-800"
-            />
-            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-stitch-500">
-              in
-            </span>
-          </div>
-        )}
-      </fieldset>
 
       <div className="rounded-xl bg-stitch-50 px-3 py-2 text-xs text-stitch-600 dark:bg-stitch-800/50 dark:text-stitch-400">
         <p>
-          <strong className="text-stitch-800 dark:text-stitch-200">Design area:</strong>{' '}
+          <strong className="text-stitch-800 dark:text-stitch-200">Working area:</strong>{' '}
           {designW.toFixed(2)}&Prime; × {designH.toFixed(2)}&Prime; ({settings.stitchWidth} ×{' '}
-          {settings.stitchHeight} stitches at {settings.fabricCount} ct)
+          {settings.stitchHeight} stitches)
         </p>
         <p className="mt-1">
-          <strong className="text-stitch-800 dark:text-stitch-200">Margin:</strong> {margin}
-          &Prime; per side · <strong className="text-stitch-800 dark:text-stitch-200">Stitched:</strong>{' '}
+          <strong className="text-stitch-800 dark:text-stitch-200">Stitched:</strong>{' '}
           {stitchCount.toLocaleString()}
         </p>
       </div>

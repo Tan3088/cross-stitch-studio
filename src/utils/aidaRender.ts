@@ -1,8 +1,8 @@
 import { findColorById, THREAD_COLORS } from '../constants/colors'
 
-export const GRID_INTERVAL = 10
+export type FabricWeave = 'mono' | 'aida'
 
-interface DrawAidaFabricOptions {
+interface DrawFabricOptions {
   ctx: CanvasRenderingContext2D
   cols: number
   rows: number
@@ -10,6 +10,25 @@ interface DrawAidaFabricOptions {
   offsetX: number
   offsetY: number
   fabricHex: string
+  weave?: FabricWeave
+}
+
+/** Draw fabric weave: open mono canvas mesh or Aida blocks. */
+export function drawFabricMesh({
+  ctx,
+  cols,
+  rows,
+  cellSize,
+  offsetX,
+  offsetY,
+  fabricHex,
+  weave = 'aida',
+}: DrawFabricOptions): void {
+  if (weave === 'mono') {
+    drawMonoCanvas({ ctx, cols, rows, cellSize, offsetX, offsetY, fabricHex })
+    return
+  }
+  drawAidaFabric({ ctx, cols, rows, cellSize, offsetX, offsetY, fabricHex })
 }
 
 /** Draw realistic Aida cloth texture over a grid region. */
@@ -21,7 +40,7 @@ export function drawAidaFabric({
   offsetX,
   offsetY,
   fabricHex,
-}: DrawAidaFabricOptions): void {
+}: Omit<DrawFabricOptions, 'weave'>): void {
   const { r, g, b } = hexToRgb(fabricHex)
   const base = fabricHex
   const blockLight = `rgb(${clamp(r + 12)}, ${clamp(g + 12)}, ${clamp(b + 10)})`
@@ -33,21 +52,17 @@ export function drawAidaFabric({
       const px = offsetX + x * cellSize
       const py = offsetY + y * cellSize
 
-      // Base fabric
       ctx.fillStyle = base
       ctx.fillRect(px, py, cellSize, cellSize)
 
-      // Raised woven block (Aida square)
       const inset = Math.max(1, cellSize * 0.12)
       ctx.fillStyle = blockLight
       ctx.fillRect(px + inset, py + inset, cellSize - inset * 2, cellSize - inset * 2)
 
-      // Shadow under threads on right and bottom edges
       ctx.fillStyle = blockShadow
       ctx.fillRect(px + cellSize - inset, py + inset, inset, cellSize - inset * 2)
       ctx.fillRect(px + inset, py + cellSize - inset, cellSize - inset * 2, inset)
 
-      // Holes at four corners (where needle goes)
       if (cellSize >= 6) {
         const holeR = Math.max(1, cellSize * 0.1)
         ctx.fillStyle = holeColor
@@ -57,6 +72,41 @@ export function drawAidaFabric({
         drawHole(ctx, px + cellSize - holeR, py + cellSize - holeR, holeR)
       }
     }
+  }
+}
+
+/** Open-weave mono / needlepoint canvas: single intersecting threads. */
+function drawMonoCanvas({
+  ctx,
+  cols,
+  rows,
+  cellSize,
+  offsetX,
+  offsetY,
+  fabricHex,
+}: Omit<DrawFabricOptions, 'weave'>): void {
+  const { r, g, b } = hexToRgb(fabricHex)
+  const gap = `rgb(${clamp(r - 28)}, ${clamp(g - 28)}, ${clamp(b - 24)})`
+  const thread = `rgb(${clamp(r + 18)}, ${clamp(g + 18)}, ${clamp(b + 16)})`
+  const threadDark = `rgba(${clamp(r - 40)}, ${clamp(g - 40)}, ${clamp(b - 35)}, 0.55)`
+  const threadW = Math.max(1.5, cellSize * 0.22)
+
+  ctx.fillStyle = gap
+  ctx.fillRect(offsetX, offsetY, cols * cellSize, rows * cellSize)
+
+  for (let y = 0; y <= rows; y++) {
+    const py = offsetY + y * cellSize
+    ctx.fillStyle = threadDark
+    ctx.fillRect(offsetX, py - threadW / 2 + 0.6, cols * cellSize, threadW)
+    ctx.fillStyle = thread
+    ctx.fillRect(offsetX, py - threadW / 2, cols * cellSize, threadW * 0.72)
+  }
+  for (let x = 0; x <= cols; x++) {
+    const px = offsetX + x * cellSize
+    ctx.fillStyle = threadDark
+    ctx.fillRect(px - threadW / 2 + 0.6, offsetY, threadW, rows * cellSize)
+    ctx.fillStyle = thread
+    ctx.fillRect(px - threadW / 2, offsetY, threadW * 0.72, rows * cellSize)
   }
 }
 
@@ -74,9 +124,10 @@ interface DrawAidaStitchOptions {
   offsetX: number
   offsetY: number
   colorHex: string
+  weave?: FabricWeave
 }
 
-/** Draw a cross stitch through the four holes of an Aida block. */
+/** Draw a cross / tent stitch. Mono canvas uses thicker yarn. */
 export function drawAidaStitch({
   ctx,
   x,
@@ -85,16 +136,16 @@ export function drawAidaStitch({
   offsetX,
   offsetY,
   colorHex,
+  weave = 'aida',
 }: DrawAidaStitchOptions): void {
   const px = offsetX + x * cellSize
   const py = offsetY + y * cellSize
-  const pad = cellSize * 0.12
-  const lineWidth = Math.max(2, cellSize * 0.17)
+  const pad = cellSize * (weave === 'mono' ? 0.08 : 0.12)
+  const lineWidth = Math.max(2, cellSize * (weave === 'mono' ? 0.32 : 0.17))
 
   const { r, g, b } = hexToRgb(colorHex)
   const shadow = `rgba(${clamp(r - 40)}, ${clamp(g - 40)}, ${clamp(b - 40)}, 0.35)`
 
-  // Thread shadow
   ctx.strokeStyle = shadow
   ctx.lineWidth = lineWidth + 0.5
   ctx.lineCap = 'round'
@@ -105,7 +156,6 @@ export function drawAidaStitch({
   ctx.lineTo(px + pad + 0.5, py + cellSize - pad + 0.5)
   ctx.stroke()
 
-  // Thread
   ctx.strokeStyle = colorHex
   ctx.lineWidth = lineWidth
   ctx.beginPath()
@@ -125,11 +175,14 @@ interface DrawAidaCanvasOptions {
   cellSize: number
   fabricHex: string
   showGrid: boolean
+  weave?: FabricWeave
+  /** Stitches per linear inch (4 for Mono, 9 for Aida). Defines 1×1 inch boxes. */
+  stitchesPerInch?: number
 }
 
 /**
- * Draw full fabric piece with margin border and design area.
- * Margin stitches surround the design; only the centre is drawable.
+ * Draw working fabric area with clear 1×1 inch boxes.
+ * Each inch box contains stitchesPerInch × stitchesPerInch crosses.
  */
 export function drawAidaCanvas({
   ctx,
@@ -140,17 +193,19 @@ export function drawAidaCanvas({
   cellSize,
   fabricHex,
   showGrid,
+  weave = 'aida',
+  stitchesPerInch = 9,
 }: DrawAidaCanvasOptions): void {
   const totalCols = designWidth + marginStitches * 2
   const totalRows = designHeight + marginStitches * 2
   const canvasW = totalCols * cellSize
   const canvasH = totalRows * cellSize
+  const inch = Math.max(1, Math.round(stitchesPerInch))
 
-  // Wooden hoop / table background
   ctx.fillStyle = '#E8DDD0'
   ctx.fillRect(0, 0, canvasW, canvasH)
 
-  drawAidaFabric({
+  drawFabricMesh({
     ctx,
     cols: totalCols,
     rows: totalRows,
@@ -158,18 +213,14 @@ export function drawAidaCanvas({
     offsetX: 0,
     offsetY: 0,
     fabricHex,
+    weave,
   })
 
-  // Margin zone tint (subtle)
   if (marginStitches > 0) {
     ctx.fillStyle = 'rgba(120, 100, 80, 0.06)'
-    // Top margin
     ctx.fillRect(0, 0, canvasW, marginStitches * cellSize)
-    // Bottom margin
     ctx.fillRect(0, (marginStitches + designHeight) * cellSize, canvasW, marginStitches * cellSize)
-    // Left margin (design rows only)
     ctx.fillRect(0, marginStitches * cellSize, marginStitches * cellSize, designHeight * cellSize)
-    // Right margin
     ctx.fillRect(
       (marginStitches + designWidth) * cellSize,
       marginStitches * cellSize,
@@ -178,19 +229,12 @@ export function drawAidaCanvas({
     )
   }
 
-  // Design area border
   const dx = marginStitches * cellSize
   const dy = marginStitches * cellSize
-  const dw = designWidth * cellSize
-  const dh = designHeight * cellSize
 
-  ctx.strokeStyle = 'rgba(180, 140, 100, 0.5)'
-  ctx.lineWidth = 2
-  ctx.setLineDash([6, 4])
-  ctx.strokeRect(dx + 1, dy + 1, dw - 2, dh - 2)
-  ctx.setLineDash([])
+  // Checker tint for each 1×1 inch box so blocks read clearly
+  drawInchBoxTint(ctx, dx, dy, designWidth, designHeight, cellSize, inch)
 
-  // Stitches in design area
   for (let y = 0; y < designHeight; y++) {
     for (let x = 0; x < designWidth; x++) {
       const colorId = pixels[y * designWidth + x]
@@ -204,57 +248,112 @@ export function drawAidaCanvas({
         offsetX: 0,
         offsetY: 0,
         colorHex: hex,
+        weave,
       })
     }
   }
 
-  if (showGrid && cellSize >= 8) {
-    drawCountingGrid(ctx, cellSize, marginStitches, designWidth, designHeight)
+  // Always mark 1×1 inch boxes; stitch lines when grid is on
+  drawInchAndStitchGrid(ctx, cellSize, marginStitches, designWidth, designHeight, inch, showGrid)
+}
+
+function drawInchBoxTint(
+  ctx: CanvasRenderingContext2D,
+  dx: number,
+  dy: number,
+  designWidth: number,
+  designHeight: number,
+  cellSize: number,
+  stitchesPerInch: number,
+) {
+  const inchPx = stitchesPerInch * cellSize
+  for (let by = 0; by * stitchesPerInch < designHeight; by++) {
+    for (let bx = 0; bx * stitchesPerInch < designWidth; bx++) {
+      if ((bx + by) % 2 !== 0) continue
+      const x0 = dx + bx * inchPx
+      const y0 = dy + by * inchPx
+      const w = Math.min(inchPx, dx + designWidth * cellSize - x0)
+      const h = Math.min(inchPx, dy + designHeight * cellSize - y0)
+      ctx.fillStyle = 'rgba(90, 70, 50, 0.07)'
+      ctx.fillRect(x0, y0, w, h)
+    }
   }
 }
 
-function drawCountingGrid(
+function drawInchAndStitchGrid(
   ctx: CanvasRenderingContext2D,
   cellSize: number,
   marginStitches: number,
   designWidth: number,
   designHeight: number,
+  stitchesPerInch: number,
+  showStitchGrid: boolean,
 ) {
   const dx = marginStitches * cellSize
   const dy = marginStitches * cellSize
   const dw = designWidth * cellSize
   const dh = designHeight * cellSize
 
-  // Minor lines in design area only
-  ctx.strokeStyle = 'rgba(80, 70, 60, 0.12)'
-  ctx.lineWidth = 0.5
+  // Per-stitch grid inside each inch (shows 4×4 or 9×9)
+  if (showStitchGrid && cellSize >= 6) {
+    ctx.strokeStyle = 'rgba(70, 55, 40, 0.22)'
+    ctx.lineWidth = Math.max(1, cellSize * 0.04)
+    ctx.beginPath()
+    for (let x = 0; x <= designWidth; x++) {
+      const px = dx + x * cellSize + 0.5
+      ctx.moveTo(px, dy)
+      ctx.lineTo(px, dy + dh)
+    }
+    for (let y = 0; y <= designHeight; y++) {
+      const py = dy + y * cellSize + 0.5
+      ctx.moveTo(dx, py)
+      ctx.lineTo(dx + dw, py)
+    }
+    ctx.stroke()
+  }
+
+  // Bold 1×1 inch box outlines
+  ctx.strokeStyle = 'rgba(40, 30, 20, 0.85)'
+  ctx.lineWidth = Math.max(2, Math.min(4, cellSize * 0.12))
   ctx.beginPath()
-  for (let x = 0; x <= designWidth; x++) {
+  for (let x = 0; x <= designWidth; x += stitchesPerInch) {
     const px = dx + x * cellSize + 0.5
     ctx.moveTo(px, dy)
     ctx.lineTo(px, dy + dh)
   }
-  for (let y = 0; y <= designHeight; y++) {
+  // Right edge if design width is not an exact multiple of an inch
+  if (designWidth % stitchesPerInch !== 0) {
+    const px = dx + designWidth * cellSize + 0.5
+    ctx.moveTo(px, dy)
+    ctx.lineTo(px, dy + dh)
+  }
+  for (let y = 0; y <= designHeight; y += stitchesPerInch) {
     const py = dy + y * cellSize + 0.5
+    ctx.moveTo(dx, py)
+    ctx.lineTo(dx + dw, py)
+  }
+  if (designHeight % stitchesPerInch !== 0) {
+    const py = dy + designHeight * cellSize + 0.5
     ctx.moveTo(dx, py)
     ctx.lineTo(dx + dw, py)
   }
   ctx.stroke()
 
-  // Major lines every 10 stitches in design area
-  ctx.strokeStyle = 'rgba(60, 50, 40, 0.35)'
-  ctx.lineWidth = 1.5
+  // Outer working-area frame
+  ctx.strokeStyle = 'rgba(90, 60, 40, 0.9)'
+  ctx.lineWidth = Math.max(2.5, cellSize * 0.1)
+  ctx.strokeRect(dx + 0.5, dy + 0.5, dw - 1, dh - 1)
+
+  // Center guides (chart style)
+  const midX = dx + Math.floor(designWidth / 2) * cellSize + 0.5
+  const midY = dy + Math.floor(designHeight / 2) * cellSize + 0.5
+  ctx.strokeStyle = 'rgba(190, 60, 60, 0.55)'
+  ctx.lineWidth = Math.max(1, cellSize * 0.04)
   ctx.beginPath()
-  for (let x = 0; x <= designWidth; x += GRID_INTERVAL) {
-    const px = dx + x * cellSize + 0.5
-    ctx.moveTo(px, dy)
-    ctx.lineTo(px, dy + dh)
-  }
-  for (let y = 0; y <= designHeight; y += GRID_INTERVAL) {
-    const py = dy + y * cellSize + 0.5
-    ctx.moveTo(dx, py)
-    ctx.lineTo(dx + dw, py)
-  }
+  ctx.moveTo(midX, dy)
+  ctx.lineTo(midX, dy + dh)
+  ctx.moveTo(dx, midY)
+  ctx.lineTo(dx + dw, midY)
   ctx.stroke()
 }
 

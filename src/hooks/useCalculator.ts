@@ -9,7 +9,6 @@ import { calculateDimensions } from '../utils/calculations'
 import {
   designStitchesFromFabricInches,
   fabricInchesFromDesign,
-  resolveMarginInches,
 } from '../utils/dimensions'
 import { loadSettings, saveSettings } from '../utils/storage'
 
@@ -18,11 +17,11 @@ function withSyncedStitches(
   fabricWidthInches: number,
   fabricHeightInches: number,
 ): CalculatorSettings {
-  const margin = resolveMarginInches(prev.borderMarginPreset, prev.customBorderMargin)
+  // Working area only: fabric size maps directly to design stitches (no margin).
   const stitches = designStitchesFromFabricInches(
     fabricWidthInches,
     fabricHeightInches,
-    margin,
+    0,
     prev.fabricCount,
   )
   return {
@@ -31,6 +30,8 @@ function withSyncedStitches(
     fabricHeightInches,
     stitchWidth: stitches.width,
     stitchHeight: stitches.height,
+    borderMarginPreset: 'custom',
+    customBorderMargin: 0,
   }
 }
 
@@ -39,13 +40,14 @@ function withSyncedFabricInches(
   stitchWidth: number,
   stitchHeight: number,
 ): CalculatorSettings {
-  const margin = resolveMarginInches(prev.borderMarginPreset, prev.customBorderMargin)
   return {
     ...prev,
     stitchWidth,
     stitchHeight,
-    fabricWidthInches: fabricInchesFromDesign(stitchWidth, margin, prev.fabricCount),
-    fabricHeightInches: fabricInchesFromDesign(stitchHeight, margin, prev.fabricCount),
+    fabricWidthInches: fabricInchesFromDesign(stitchWidth, 0, prev.fabricCount),
+    fabricHeightInches: fabricInchesFromDesign(stitchHeight, 0, prev.fabricCount),
+    borderMarginPreset: 'custom',
+    customBorderMargin: 0,
   }
 }
 
@@ -53,18 +55,26 @@ function withSyncedFabricInches(
 export function useCalculator() {
   const [settings, setSettings] = useState<CalculatorSettings>(() => {
     const loaded = loadSettings()
-    if (
-      typeof loaded.fabricWidthInches === 'number' &&
-      typeof loaded.fabricHeightInches === 'number'
-    ) {
-      return loaded
-    }
-    const margin = resolveMarginInches(loaded.borderMarginPreset, loaded.customBorderMargin)
-    return {
+    const normalized: CalculatorSettings = {
       ...loaded,
-      fabricWidthInches: fabricInchesFromDesign(loaded.stitchWidth, margin, loaded.fabricCount),
-      fabricHeightInches: fabricInchesFromDesign(loaded.stitchHeight, margin, loaded.fabricCount),
+      borderMarginPreset: 'custom',
+      customBorderMargin: 0,
     }
+    if (
+      typeof normalized.fabricWidthInches === 'number' &&
+      typeof normalized.fabricHeightInches === 'number'
+    ) {
+      return withSyncedStitches(
+        normalized,
+        normalized.fabricWidthInches,
+        normalized.fabricHeightInches,
+      )
+    }
+    return withSyncedFabricInches(
+      normalized,
+      normalized.stitchWidth,
+      normalized.stitchHeight,
+    )
   })
 
   useEffect(() => {
@@ -104,18 +114,24 @@ export function useCalculator() {
     })
   }, [])
 
-  const setBorderMarginPreset = useCallback((value: BorderMarginPreset) => {
-    setSettings((prev) => {
-      const next = { ...prev, borderMarginPreset: value }
-      return withSyncedStitches(next, next.fabricWidthInches, next.fabricHeightInches)
-    })
+  const setBorderMarginPreset = useCallback((_value: BorderMarginPreset) => {
+    setSettings((prev) =>
+      withSyncedStitches(
+        { ...prev, borderMarginPreset: 'custom', customBorderMargin: 0 },
+        prev.fabricWidthInches,
+        prev.fabricHeightInches,
+      ),
+    )
   }, [])
 
-  const setCustomBorderMargin = useCallback((value: number) => {
-    setSettings((prev) => {
-      const next = { ...prev, customBorderMargin: value }
-      return withSyncedStitches(next, next.fabricWidthInches, next.fabricHeightInches)
-    })
+  const setCustomBorderMargin = useCallback((_value: number) => {
+    setSettings((prev) =>
+      withSyncedStitches(
+        { ...prev, borderMarginPreset: 'custom', customBorderMargin: 0 },
+        prev.fabricWidthInches,
+        prev.fabricHeightInches,
+      ),
+    )
   }, [])
 
   const setFabricColorId = useCallback((value: string) => {

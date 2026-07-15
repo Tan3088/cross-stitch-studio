@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { CrossStitchDesign, DesignTool } from '../types'
+import { MAX_ZOOM, MIN_ZOOM } from '../constants/fabricCounts'
 import { clearPattern, createEmptyPattern, floodFill, resizePattern, setPixel } from '../utils/pattern'
-import { applyTemplate } from '../utils/templates'
 import { loadDesign, saveDesign } from '../utils/storage'
+import { applyTemplate } from '../utils/templates'
+import { clampZoom } from '../utils/zoom'
 
 interface UseDesignStudioOptions {
   stitchWidth: number
@@ -23,7 +25,7 @@ export function useDesignStudio({
   const [activeColorId, setActiveColorId] = useState('navy')
   const [showGrid, setShowGrid] = useState(true)
   const [zoom, setZoom] = useState(1.25)
-  const [fitToView, setFitToView] = useState(true)
+  const [fitToView, setFitToView] = useState(false)
 
   useEffect(() => {
     saveDesign(design)
@@ -90,14 +92,18 @@ export function useDesignStudio({
 
   const zoomIn = useCallback(() => {
     setFitToView(false)
-    setZoom((z) => Math.min(4, z + 0.25))
+    setZoom((z) => Math.min(MAX_ZOOM, z + 0.25))
   }, [])
   const zoomOut = useCallback(() => {
     setFitToView(false)
-    setZoom((z) => Math.max(0.25, z - 0.25))
+    setZoom((z) => Math.max(MIN_ZOOM, z - 0.25))
   }, [])
   const toggleFitToView = useCallback(() => setFitToView((f) => !f), [])
-  const enableFitToView = useCallback(() => setFitToView(true), [])
+  const setFitToViewExplicit = useCallback((fit: boolean) => setFitToView(fit), [])
+  const setZoomExplicit = useCallback((z: number) => {
+    setFitToView(false)
+    setZoom(clampZoom(z))
+  }, [])
   const toggleGrid = useCallback(() => setShowGrid((g) => !g), [])
 
   return {
@@ -120,6 +126,7 @@ export function useDesignStudio({
     zoomIn,
     zoomOut,
     toggleFitToView,
-    enableFitToView,
+    setFitToViewExplicit,
+    setZoomExplicit,
   }
 }

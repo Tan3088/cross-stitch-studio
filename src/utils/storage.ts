@@ -4,6 +4,7 @@ import {
   type CrossStitchDesign,
   type Theme,
 } from '../types'
+import { isValidFabricCount } from '../constants/fabricCounts'
 import { createEmptyPattern } from './pattern'
 
 const SETTINGS_KEY = 'cross-stitch-calculator-settings'
@@ -27,6 +28,11 @@ function isValidSettings(value: unknown): value is CalculatorSettings {
   )
 }
 
+function normalizeSettings(settings: CalculatorSettings): CalculatorSettings {
+  if (isValidFabricCount(settings.fabricCount)) return settings
+  return { ...settings, fabricCount: DEFAULT_SETTINGS.fabricCount }
+}
+
 /** Load persisted calculator settings, falling back to defaults. */
 export function loadSettings(): CalculatorSettings {
   try {
@@ -34,7 +40,7 @@ export function loadSettings(): CalculatorSettings {
     if (!raw) return { ...DEFAULT_SETTINGS }
     const parsed: unknown = JSON.parse(raw)
     if (isValidSettings(parsed)) {
-      return { ...DEFAULT_SETTINGS, ...parsed }
+      return normalizeSettings({ ...DEFAULT_SETTINGS, ...parsed })
     }
   } catch {
     // Ignore corrupt storage

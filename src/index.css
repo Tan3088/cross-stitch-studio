@@ -31,6 +31,13 @@
     @apply min-h-dvh overflow-x-hidden;
   }
 
+  button,
+  [role='button'],
+  input,
+  label {
+    touch-action: manipulation;
+  }
+
   /* Visible focus for keyboard users (WCAG AA) */
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-stitch-500 dark:outline-stitch-400;
